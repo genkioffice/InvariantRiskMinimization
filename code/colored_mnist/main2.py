@@ -22,8 +22,25 @@ for k,v in sorted(vars(flags).items()):
 
 # for restart in range(flags.n_restarts):
 mnist = datasets.MNIST('~/datasets/mnist', train=True, download=True)
-mnist_train = mnist.data[:50000], mnist.targets[:50000]
-mnist_test = mnist.data[50000:], mnist.targets[50000:]
+
+# rng_state = np.random.get_state()
+# # 追加
+# rng_state = list(rng_state)
+# random_ints = np.random.randint(0, max(rng_state[1]), len(rng_state[1]))
+# del rng_state[1]
+# rng_state.insert(1, random_ints)
+# np.random.set_state(rng_state)
+
+
+
+# np.random.shuffle(mnist.data)
+# # np.random.set_state(rng_state)
+# np.random.shuffle(mnist.targets)
+
+
+
+mnist_train = (mnist.data[:50000], mnist.targets[:50000])
+mnist_test = (mnist.data[50000:], mnist.targets[50000:])
 
 
 
@@ -86,50 +103,59 @@ class MLP(nn.Module):
         out = self._main(out)
         return out
 
-mlp = MLP().cuda()
-optimizer = optim.Adam(mlp.parameters(), lr=flags.lr)
 
-envs = [
-    make_environment(mnist_train[0][::2], mnist_train[1][::2], 0.2), # 0.8の確率でlabel->colorを
-    make_environment(mnist_train[0][1::2], mnist_train[1][1::2], 0.1), # 0.9の確率
-    make_environment(mnist_test[0], mnist_test[1], 0.9) # 0.1の確率. テストにおいては擬似相関が小さくなる
-]
+for restart in range(flags.n_restarts):
+    print("Restart", restart)
+    np.random.seed(restart + 40)
+    np.random.shuffle(mnist_train[0].numpy())
+    np.random.shuffle(mnist_train[1].numpy())
 
-pretty_print('step', 'train nll', 'train acc', 'train penalty', 'test acc')
-for step in range(flags.steps):
-    for env in envs:
-        logits = mlp(env['images'])
-        env['nll'] = mean_nll(logits, env['labels'])
-        env['acc'] = accuracy(logits, env['labels'])
-        env['penalty'] = penalty(logits, env['labels'])
-    
-    train_nll = torch.stack([envs[0]['nll'], envs[1]['nll']]).mean()
-    train_acc = torch.stack([envs[0]['acc'], envs[1]['acc']]).mean()
-    train_penalty = torch.stack([envs[0]['penalty'], envs[1]['penalty']]).mean()
-    weight_norm = torch.tensor(0.).cuda()
 
-    # これは何のためにある？ => たぶんERMとpenaltyの比率
-    for w in mlp.parameters():
-        weight_norm += w.norm().pow(2)
-    
-    loss = train_nll.clone()
-    loss += flags.l2_regularizer_weight * weight_norm
-    penalty_weight = (flags.penalty_weight if step >= flags.penalty_anneal_iters else 1.0)
-    loss += penalty_weight * train_penalty
+    mlp = MLP().cuda()
+    optimizer = optim.Adam(mlp.parameters(), lr=flags.lr)
 
-    if penalty_weight > 1.0:
-        loss /= penalty_weight
+    envs = [
+        make_environment(mnist_train[0][::2], mnist_train[1][::2], 0.2), # 0.8の確率でlabel->colorを
+        make_environment(mnist_train[0][1::2], mnist_train[1][1::2], 0.1), # 0.9の確率
+        make_environment(mnist_test[0], mnist_test[1], 0.9) # 0.1の確率. テストにおいては擬似相関が小さくなる
+    ]
 
-    optimizer.zero_grad()
-    loss.backward()
-    optimizer.step()
+    pretty_print('step', 'train nll', 'train acc', 'train penalty', 'test acc' 'loss')
+    for step in range(flags.steps):
+        for env in envs:
+            logits = mlp(env['images'])
+            env['nll'] = mean_nll(logits, env['labels'])
+            env['acc'] = accuracy(logits, env['labels'])
+            env['penalty'] = penalty(logits, env['labels'])
+        
+        train_nll = torch.stack([envs[0]['nll'], envs[1]['nll']]).mean()
+        train_acc = torch.stack([envs[0]['acc'], envs[1]['acc']]).mean()
+        train_penalty = torch.stack([envs[0]['penalty'], envs[1]['penalty']]).mean()
+        
+        weight_norm = torch.tensor(0.).cuda()
+        # これは何のためにある？ => たぶんERMとpenaltyの比率
+        for w in mlp.parameters():
+            weight_norm += w.norm().pow(2)
+        
+        loss = train_nll.clone()
+        loss += flags.l2_regularizer_weight * weight_norm
+        penalty_weight = (flags.penalty_weight if step >= flags.penalty_anneal_iters else 1.0)
+        loss += penalty_weight * train_penalty
 
-    test_acc = envs[2]['acc']
-    if step % 100 == 0:
-        pretty_print(
-            np.int32(step),
-            train_nll.detach().cpu().numpy(),
-            train_acc.detach().cpu().numpy(),
-            train_penalty.detach().cpu().numpy(),
-            test_acc.detach().cpu().numpy()
-      )
+        if penalty_weight > 1.0:
+            loss /= penalty_weight
+
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        test_acc = envs[2]['acc']
+        if step % 100 == 0:
+            pretty_print(
+                np.int32(step),
+                train_nll.detach().cpu().numpy(),
+                train_acc.detach().cpu().numpy(),
+                train_penalty.detach().cpu().numpy(),
+                test_acc.detach().cpu().numpy(),
+                loss.detach().cpu().numpy()
+        )

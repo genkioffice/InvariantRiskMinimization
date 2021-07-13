@@ -37,9 +37,10 @@ for restart in range(flags.n_restarts):
   mnist_train = (mnist.data[:50000], mnist.targets[:50000])
   mnist_val = (mnist.data[50000:], mnist.targets[50000:])
 
-  rng_state = np.random.get_state()
+  np.random.seed(restart + 40)    
+#   rng_state = np.random.get_state()
   np.random.shuffle(mnist_train[0].numpy())
-  np.random.set_state(rng_state)
+#   np.random.set_state(rng_state)
   np.random.shuffle(mnist_train[1].numpy())
 
   # Build environments
@@ -57,16 +58,16 @@ for restart in range(flags.n_restarts):
     # Assign a color based on the label; flip the color with probability e
     colors = torch_xor(labels, torch_bernoulli(e, len(labels)))
     # Apply the color to the image by zeroing out the other color channel
-    images = torch.stack([images, images], dim=1)
-    images[torch.tensor(range(len(images))), (1-colors).long(), :, :] *= 0
+    images = torch.stack([images, images], dim=1) # data_dim x 2 x 28 x 28. 
+    images[torch.tensor(range(len(images))), (1-colors).long(), :, :] *= 0 # 配列の二層目ですべて0か、まばらに1が存在するかの層を作った。
     return {
       'images': (images.float() / 255.).cuda(),
-      'labels': labels[:, None].cuda()
+      'labels': labels[:, None].cuda() # labels.reshape((N_images ,1))と同じ.
     }
 
   envs = [
-    make_environment(mnist_train[0][::2], mnist_train[1][::2], 0.2),
-    make_environment(mnist_train[0][1::2], mnist_train[1][1::2], 0.1),
+    make_environment(mnist_train[0][::2], mnist_train[1][::2], 0.2), # データの偶数番目を取得(0,2,4...)
+    make_environment(mnist_train[0][1::2], mnist_train[1][1::2], 0.1), # データの奇数番目(1,3,...)
     make_environment(mnist_val[0], mnist_val[1], 0.9)
   ]
 
@@ -105,9 +106,9 @@ for restart in range(flags.n_restarts):
     return ((preds - y).abs() < 1e-2).float().mean()
 
   def penalty(logits, y):
-    scale = torch.tensor(1.).cuda().requires_grad_()
+    scale = torch.tensor(1.).cuda().requires_grad_() # これはたぶんw=1.0のこと。
     loss = mean_nll(logits * scale, y)
-    grad = autograd.grad(loss, [scale], create_graph=True)[0]
+    grad = autograd.grad(loss, [scale], create_graph=True)[0] # lossをwで偏微分
     return torch.sum(grad**2)
 
   # Train loop
@@ -123,12 +124,12 @@ for restart in range(flags.n_restarts):
 
   optimizer = optim.Adam(mlp.parameters(), lr=flags.lr)
 
-  pretty_print('step', 'train nll', 'train acc', 'train penalty', 'test acc')
+  pretty_print('step', 'train nll', 'train acc', 'train penalty', 'test acc', 'loss')
 
   for step in range(flags.steps):
-    for env in envs:
+    for env in envs: # envsはlabel付きデータセットの配列
       logits = mlp(env['images'])
-      env['nll'] = mean_nll(logits, env['labels'])
+      env['nll'] = mean_nll(logits, env['labels']) #nll: negative log likelihood
       env['acc'] = mean_accuracy(logits, env['labels'])
       env['penalty'] = penalty(logits, env['labels'])
 
@@ -160,7 +161,8 @@ for restart in range(flags.n_restarts):
         train_nll.detach().cpu().numpy(),
         train_acc.detach().cpu().numpy(),
         train_penalty.detach().cpu().numpy(),
-        test_acc.detach().cpu().numpy()
+        test_acc.detach().cpu().numpy(),
+        loss.detach().cpu().numpy()
       )
 
   final_train_accs.append(train_acc.detach().cpu().numpy())
