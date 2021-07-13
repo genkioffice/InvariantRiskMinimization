@@ -1,0 +1,7 @@
+numpy
+torch
+argparse
+scipy
+grad
+datasets
+matplotlib
