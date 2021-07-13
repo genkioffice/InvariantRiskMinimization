@@ -37,10 +37,10 @@ for restart in range(flags.n_restarts):
   mnist_train = (mnist.data[:50000], mnist.targets[:50000])
   mnist_val = (mnist.data[50000:], mnist.targets[50000:])
 
-  np.random.seed(restart + 40)    
-#   rng_state = np.random.get_state()
+#   np.random.seed(restart + 40)    
+  rng_state = np.random.get_state()
   np.random.shuffle(mnist_train[0].numpy())
-#   np.random.set_state(rng_state)
+  np.random.set_state(rng_state)
   np.random.shuffle(mnist_train[1].numpy())
 
   # Build environments

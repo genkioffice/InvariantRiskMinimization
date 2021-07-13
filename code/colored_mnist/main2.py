@@ -1,5 +1,6 @@
 import argparse
 import numpy as np
+import pandas as pd
 import torch
 from torchvision import datasets
 from torch import nn, optim, autograd
@@ -42,6 +43,9 @@ mnist = datasets.MNIST('~/datasets/mnist', train=True, download=True)
 mnist_train = (mnist.data[:50000], mnist.targets[:50000])
 mnist_test = (mnist.data[50000:], mnist.targets[50000:])
 
+
+from sklearn.utils import shuffle
+mnist_train = shuffle(mnist_train[0], mnist_train[1])
 
 
 def make_environment(images, labels, p_color):
@@ -103,12 +107,13 @@ class MLP(nn.Module):
         out = self._main(out)
         return out
 
+results = {}
 
 for restart in range(flags.n_restarts):
     print("Restart", restart)
-    np.random.seed(restart + 40)
-    np.random.shuffle(mnist_train[0].numpy())
-    np.random.shuffle(mnist_train[1].numpy())
+    # np.random.seed(restart + 40)
+    # np.random.shuffle(mnist_train[0].numpy())
+    # np.random.shuffle(mnist_train[1].numpy())
 
 
     mlp = MLP().cuda()
@@ -158,4 +163,20 @@ for restart in range(flags.n_restarts):
                 train_penalty.detach().cpu().numpy(),
                 test_acc.detach().cpu().numpy(),
                 loss.detach().cpu().numpy()
-        )
+            )
+            idx = ['step', 'train nll', 'train acc', 'train penalty', 'test acc', 'loss']
+            vals = [np.int32(step),
+                float(train_nll.detach().cpu().numpy()),
+                float(train_acc.detach().cpu().numpy()),
+                float(train_penalty.detach().cpu().numpy()),
+                float(test_acc.detach().cpu().numpy()),
+                float(loss.detach().cpu().numpy())]
+            for k,v in zip(idx,vals):
+                if (step == 0) & (k not in results.keys()):
+                    results[k] = []
+                results[k].append(v)
+print(results)
+data = pd.DataFrame(results)
+print(data)
+data.to_pickle("results.pickle")
+# data = pd.DataFrame(results).to_pickle("./results.pickle")
