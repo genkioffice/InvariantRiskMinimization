@@ -22,16 +22,16 @@ class ChainEquationModel(object):
             self.wyz = torch.randn(self.dim, self.dim) / dim
 
         if scramble:
-            self.scramble, _ = torch.qr(torch.randn(dim, dim))
+            self.scramble, _ = torch.qr(torch.randn(dim, dim)) # dim x dim
         else:
             self.scramble = torch.eye(dim)
 
         if hidden:
-            self.whx = torch.randn(self.dim, self.dim) / dim
+            self.whx = torch.randn(self.dim, self.dim) / dim # dim x dim
             self.why = torch.randn(self.dim, self.dim) / dim
             self.whz = torch.randn(self.dim, self.dim) / dim
         else:
-            self.whx = torch.eye(self.dim, self.dim)
+            self.whx = torch.eye(self.dim, self.dim) # dim x dim
             self.why = torch.zeros(self.dim, self.dim)
             self.whz = torch.zeros(self.dim, self.dim)
 
@@ -40,14 +40,15 @@ class ChainEquationModel(object):
         return w, self.scramble
 
     def __call__(self, n, env):
-        h = torch.randn(n, self.dim) * env
-        x = h @ self.whx + torch.randn(n, self.dim) * env
+        h = torch.randn(n, self.dim) * env # n x dim
+        x = h @ self.whx + torch.randn(n, self.dim) * env # n x dim
 
         if self.hetero:
-            y = x @ self.wxy + h @ self.why + torch.randn(n, self.dim) * env
-            z = y @ self.wyz + h @ self.whz + torch.randn(n, self.dim)
+            y = x @ self.wxy + h @ self.why + torch.randn(n, self.dim) * env # n x dim
+            z = y @ self.wyz + h @ self.whz + torch.randn(n, self.dim) # n x dim
         else:
             y = x @ self.wxy + h @ self.why + torch.randn(n, self.dim)
             z = y @ self.wyz + h @ self.whz + torch.randn(n, self.dim) * env
-
+        
+        # torch.cat((x, z), 1): n x (dim + dim) ? 演算不可能では?
         return torch.cat((x, z), 1) @ self.scramble, y.sum(1, keepdim=True)
