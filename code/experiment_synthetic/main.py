@@ -6,6 +6,7 @@
 #
 
 from sem import ChainEquationModel
+print("loaded")
 from models import *
 
 import argparse
